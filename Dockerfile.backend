@@ -1,0 +1,26 @@
+# Backend Services Dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install PM2 globally
+RUN npm install -g pm2
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy backend services
+COPY backend/ ./backend/
+COPY ecosystem.production.config.cjs ./
+
+# Copy logs directory
+RUN mkdir -p logs
+
+# Expose all backend ports
+EXPOSE 3001 3036 3897 5000 5001 5002 5003 5004 5010
+
+# Start all services with PM2
+CMD ["pm2-runtime", "start", "ecosystem.production.config.cjs", "--only", "api-gateway-prod,events-service-prod,heatmap-service-prod,maps-service-prod,auth-service-prod,org-management-service-prod,event-service-dashboard-prod,building-service-prod,alert-service-prod"]

@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Database (if needed)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: exhibition_db
+      POSTGRES_USER: exhibition_user
+      POSTGRES_PASSWORD: exhibition_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/heatmap/database:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - exhibition_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exhibition_user -d exhibition_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Backend Services
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://exhibition_user:exhibition_password@postgres:5432/exhibition_db
+      - HOST=0.0.0.0
+    ports:
+      - "3001:3001"   # Maps Service
+      - "3036:3036"   # Events Service
+      - "3897:3897"   # Heatmap Service  
+      - "5000:5000"   # API Gateway
+      - "5001:5001"   # Org Management
+      - "5002:5002"   # Event Dashboard
+      - "5003:5003"   # Building Service
+      - "5004:5004"   # Auth Service
+      - "5010:5010"   # Alert Service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - exhibition_network
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - exhibition_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - exhibition_network
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  exhibition_network:
+    driver: bridge
